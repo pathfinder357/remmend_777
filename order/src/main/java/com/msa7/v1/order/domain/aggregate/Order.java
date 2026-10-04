@@ -51,6 +51,7 @@ public class Order {
 		UUID endHubId, String destinationAddress) {
 		Order order = Order.builder()
 			.id(UUID.randomUUID())
+			.receiverCompanyId(receiverCompanyId)
 			.productId(productId)
 			.quantity(quantity)
 			.status(OrderStatus.PENDING)// c초기 상태

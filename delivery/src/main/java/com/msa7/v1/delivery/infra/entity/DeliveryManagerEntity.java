@@ -45,4 +45,12 @@ public class DeliveryManagerEntity extends BaseEntity {
 		this.type = type;
 		this.assignmentSeq = assignmentSeq;
 	}
+
+	// 영속 상태의 엔티티에 변경분을 반영한다. 트랜잭션 종료 시 변경 감지로 UPDATE된다.
+	public void update(UUID hubId, UUID slackId, ManagerType type, Integer assignmentSeq) {
+		this.hubId = hubId;
+		this.slackId = slackId;
+		this.type = type;
+		this.assignmentSeq = assignmentSeq;
+	}
 }

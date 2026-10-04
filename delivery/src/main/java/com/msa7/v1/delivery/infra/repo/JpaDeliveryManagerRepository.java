@@ -12,7 +12,9 @@ import com.msa7.v1.delivery.infra.entity.DeliveryManagerEntity;
 public interface JpaDeliveryManagerRepository extends JpaRepository<DeliveryManagerEntity, UUID> {
 	@Query("SELECT MAX(m.assignmentSeq) FROM DeliveryManagerEntity m")
 	Optional<Integer> findMaxSequence();
-	Optional<DeliveryManagerEntity> findFirstByHubIdAndTypeAndAssignmentSeqGreaterThanOrderByAssignmentSeqAsc(
+
+	// 논리 삭제된 담당자에게는 배송을 배정하지 않는다.
+	Optional<DeliveryManagerEntity> findFirstByHubIdAndTypeAndAssignmentSeqGreaterThanAndDeletedAtIsNullOrderByAssignmentSeqAsc(
 		UUID hubId, ManagerType type, Integer assignmentSeq
 	);
 }

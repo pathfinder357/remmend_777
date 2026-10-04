@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final HeaderAuthenticationFilter headerAuthenticationFilter;
+    private final InternalApiKeyFilter internalApiKeyFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -35,6 +36,8 @@ public class SecurityConfig {
                 // URL 자체의 세부 권한 판단은 여기서 하지 않는다.
                  // 역할별 접근 권한은 Controller의 @PreAuthorize에서 관리할 예정이므로 HTTP 요청 자체는 우선 허용한다.
                 .authorizeHttpRequests(auth -> auth
+                        // 내부 API는 사용자 헤더가 아니라 InternalApiKeyFilter가 부여한 서비스 권한을 요구한다.
+                        .requestMatchers("/internal/**").hasRole("INTERNAL")
                         .anyRequest().permitAll()
                 )
 
@@ -42,6 +45,12 @@ public class SecurityConfig {
                 .addFilterBefore(
                         headerAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
+                )
+
+                // 내부 API 요청은 헤더 인증보다 먼저 API Key로 걸러낸다.
+                .addFilterBefore(
+                        internalApiKeyFilter,
+                        HeaderAuthenticationFilter.class
                 );
 
         return http.build();

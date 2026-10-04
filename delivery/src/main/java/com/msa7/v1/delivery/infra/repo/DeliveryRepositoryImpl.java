@@ -45,13 +45,13 @@ public class DeliveryRepositoryImpl implements DeliveryRepo {
 			.map(this::toDomain);
 	}
 
+	/*
+	 * 조회한 영속 엔티티에 직접 삭제 정보를 남긴다.
+	 * 도메인 객체를 다시 엔티티로 변환해 저장하면 삭제 정보가 빠진 새 엔티티로 덮어써진다.
+	 */
 	@Override
 	public void deleteById(UUID id, UUID deletedBy) {
-		jpaDeliveryRepository.findById(id).ifPresent(entity -> {
-			Delivery delivery = toDomain(entity);
-			entity.delete(deletedBy);
-			jpaDeliveryRepository.save(toEntity(delivery));
-		});
+		jpaDeliveryRepository.findById(id).ifPresent(entity -> entity.delete(deletedBy));
 	}
 
 	@Override

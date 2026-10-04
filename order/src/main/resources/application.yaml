@@ -11,6 +11,8 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    # Outbox Relay가 브로커의 ack를 확인한 뒤에만 PUBLISHED로 표시하기 위해 필요하다.
+    publisher-confirm-type: correlated
     listener:
       simple:
         retry:
@@ -49,3 +51,8 @@ management:
   tracing:
     sampling:
       probability: 1.0
+
+# 서비스 간 내부 API 호출 인증 키.
+# 운영에서는 INTERNAL_API_KEY 환경변수로 반드시 주입한다. 아래 기본값은 로컬 개발 전용이다.
+internal:
+  api-key: ${INTERNAL_API_KEY:local-dev-internal-key}

@@ -8,6 +8,8 @@ import java.util.UUID;
 import com.msa7.v1.delivery.domain.vo.DeliveryStatus;
 import com.msa7.v1.delivery.domain.vo.DestinationAddress;
 import com.msa7.v1.delivery.domain.vo.RouteStatus;
+import com.msa7.v1.delivery.global.common.BusinessException;
+import com.msa7.v1.delivery.global.common.ErrorCode;
 import com.msa7.v1.delivery.presentation.dto.payload.DeliveryCompletedEvent;
 import com.msa7.v1.delivery.presentation.dto.payload.DeliveryCreatedEvent;
 
@@ -98,11 +100,20 @@ public class Delivery {
 		this.status = newStatus;
 	}
 
-	public void updateRouteStatus(UUID routeId, RouteStatus newStatus) {
+	/*
+	 * requesterId가 주어지면 본인에게 배정된 경로만 변경할 수 있다.
+	 * 관리자(MASTER, HUB_MANAGER)처럼 담당자 확인이 필요 없는 요청은 null로 호출한다.
+	 */
+	public void updateRouteStatus(UUID routeId, RouteStatus newStatus, UUID requesterId) {
 		DeliveryRouteRecord targetRoute = this.routes.stream()
 			.filter(r -> r.getId().equals(routeId))
 			.findFirst()
 			.orElseThrow(() -> new IllegalArgumentException("해당 경로를 찾을 수 없습니다."));
+
+		if (requesterId != null && !requesterId.equals(targetRoute.getDeliveryManagerId())) {
+			throw new BusinessException(ErrorCode.FORBIDDEN, "본인에게 배정된 배송 경로만 변경할 수 있습니다.");
+		}
+
 		targetRoute.updateStatus(newStatus);
 		boolean isAllCompleted = this.routes.stream()
 			.allMatch(r -> r.getStatus() == RouteStatus.ARRIVED);

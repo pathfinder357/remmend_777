@@ -3,7 +3,6 @@ package com.msa7.v1.delivery.app;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,12 +12,14 @@ import com.msa7.v1.delivery.domain.aggregateDelivery.Delivery;
 import com.msa7.v1.delivery.domain.aggregateDelivery.DeliveryRouteRecord;
 import com.msa7.v1.delivery.domain.repo.DeliveryRepo;
 import com.msa7.v1.delivery.domain.vo.DeliveryStatus;
+import com.msa7.v1.delivery.domain.vo.ManagerType;
 import com.msa7.v1.delivery.domain.vo.RouteStatus;
+import com.msa7.v1.delivery.infra.entity.ProcessedEventEntity;
 import com.msa7.v1.delivery.infra.feign.HubClient;
-import com.msa7.v1.delivery.infra.feign.UserClient;
 import com.msa7.v1.delivery.infra.outobx.DeliveryOutboxEvent;
 import com.msa7.v1.delivery.infra.outobx.DeliveryOutboxEventRepo;
 import com.msa7.v1.delivery.infra.repo.JpaDeliveryRouteRecordRepository;
+import com.msa7.v1.delivery.infra.repo.ProcessedEventRepository;
 import com.msa7.v1.delivery.presentation.dto.HubRouteResponse;
 import com.msa7.v1.delivery.presentation.dto.payload.DeliveryFailedEvent;
 import com.msa7.v1.delivery.presentation.dto.payload.DeliveryResponse;
@@ -35,50 +36,13 @@ import lombok.extern.slf4j.Slf4j;
 public class DeliveryService {
 
 	private final DeliveryRepo deliveryRepo;
-	private final UserClient userClient;
 	private final HubClient hubClient;
 	private final JpaDeliveryRouteRecordRepository routeRepo;
 	private final DeliveryOutboxEventRepo outboxEventRepo;
+	private final ProcessedEventRepository processedEventRepo;
+	private final DeliveryManagerService deliveryManagerService;
 	private final ObjectMapper objectMapper;
 
-	// @Transactional
-	// public UUID createDelivery(UUID orderId, UUID startHubId, UUID endHubId, String destinationAddress,
-	// 	String receiverName, UUID receiverSlackId) {
-	//
-	// 	// 1. 업체 배송 담당자 할당
-	// 	UUID companyManagerId = userClient.getNextDeliveryManagerId(endHubId);
-	//
-	// 	// 2. 도메인 객체 생성
-	// 	Delivery delivery = Delivery.create(orderId, startHubId, endHubId, receiverName,destinationAddress,receiverSlackId, companyManagerId);
-	//
-	// 	// 3. 배송 경로 기록 일괄 생성 (최초 생성 시 전체 경로 세팅)
-	// 	HubRouteResponse hubRoute = hubClient.getRouteInfo(startHubId, endHubId);
-	// 	List<HubRouteResponse> hubRoutes = List.of(hubRoute);
-	// 	List<DeliveryRouteRecord> routes = new ArrayList<>();
-	//
-	// 	int sequence = 0;
-	//
-	// 	for (HubRouteResponse res : hubRoutes) {
-	// 		// 각 구간마다 담당할 허브 배송 담당자를 순차 할당 (UserClient 활용)
-	// 		UUID hubDeliveryManagerId = userClient.getNextDeliveryManagerId(res.startHubId());
-	//
-	// 		DeliveryRouteRecord route = DeliveryRouteRecord.create(
-	// 			sequence++,
-	// 			res.startHubId(),
-	// 			res.endHubId(),
-	// 			res.estimatedDistance(),
-	// 			res.estimatedTime(),
-	// 			hubDeliveryManagerId
-	// 		);
-	// 		routes.add(route);
-	// 	}
-	//
-	// 	// 4. 경로 할당 및 저장
-	// 	delivery.assignRoutes(routes);
-	// 	deliveryRepo.save(delivery);
-	//
-	// 	return delivery.getId();
-	// }
 	// 주믄한 사람이 배송을 확인하고 싶을때
 	@Transactional
 	public void updateDeliveryStatus(UUID deliveryId, DeliveryStatus status) {
@@ -88,14 +52,18 @@ public class DeliveryService {
 		delivery.updateStatus(status);
 		deliveryRepo.save(delivery);
 	}
-	// 배송기사가 배송상태를 변경할때의 메서드
+
+	/*
+	 * 배송기사가 배송상태를 변경할때의 메서드.
+	 * requesterId가 null이 아니면 본인에게 배정된 경로만 변경할 수 있다.
+	 */
 	@Transactional
-	public void updateDeliveryRouteStatus(UUID deliveryId, UUID routeId, RouteStatus newStatus) {
+	public void updateDeliveryRouteStatus(UUID deliveryId, UUID routeId, RouteStatus newStatus, UUID requesterId) {
 		// 1. 배송 엔티티 조회
 		Delivery delivery = deliveryRepo.findById(deliveryId)
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 배송입니다."));
 
-		delivery.updateRouteStatus(routeId, newStatus);
+		delivery.updateRouteStatus(routeId, newStatus, requesterId);
 
 		// 영속화
 		// 전체 완료 시 내부적으로 DeliveryCompletedEvent가 Outbox에 자동 적재됨
@@ -134,16 +102,30 @@ public class DeliveryService {
 		);
 	}
 
+	/*
+	 * 주문 생성 이벤트를 받아 배송을 만든다.
+	 *
+	 * RabbitMQ는 at-least-once이므로 같은 이벤트가 두 번 올 수 있다.
+	 * 처리 이력(eventId)과 주문당 배송 존재 여부를 먼저 확인해 중복 생성을 막고,
+	 * 최종 방어선으로 p_delivery.order_id에 UNIQUE 제약을 둔다.
+	 */
 	@Transactional
-	public void createDeliveryFromOrder(OrderCreatedEvent event) {
-		try {
-			// 업체 배송 담당자 랜덤 할당
-			List<UUID> companyManagers = userClient.getDeliveryManagersByHubId(event.endHubId());
+	public void createDeliveryFromOrder(OrderCreatedEvent event, UUID eventId) {
+		if (eventId != null && processedEventRepo.existsById(eventId)) {
+			log.info("이미 처리한 이벤트입니다. eventId={}", eventId);
+			return;
+		}
 
-			if (companyManagers == null || companyManagers.isEmpty()) {
-				throw new IllegalStateException("도착지 허브에 할당 가능한 업체 배송 담당자가 없습니다. hubId: " + event.endHubId());
-			}
-			UUID companyManagerId = companyManagers.get(ThreadLocalRandom.current().nextInt(companyManagers.size()));
+		if (deliveryRepo.findByOrderId(event.orderId()).isPresent()) {
+			log.info("이미 배송이 생성된 주문입니다. orderId={}", event.orderId());
+			markProcessed(eventId);
+			return;
+		}
+
+		try {
+			// 업체 배송 담당자를 순번대로 배정
+			UUID companyManagerId =
+				deliveryManagerService.assignNextManager(event.endHubId(), ManagerType.COMPANY_STAFF);
 
 			// 도메인 객체 생성
 			Delivery delivery = Delivery.createFromOrder(
@@ -162,13 +144,9 @@ public class DeliveryService {
 
 			int sequence = 0;
 			for (HubRouteResponse res : hubRoutes) {
-				// TODO: UserClient에 파라미터로 type="HUB_STAFF" 넘겨서 필터링 받는 것을 권장
-				List<UUID> hubManagers = userClient.getDeliveryManagersByHubId(res.startHubId());
-
-				if (hubManagers == null || hubManagers.isEmpty()) {
-					throw new IllegalStateException("출발지 허브에 할당 가능한 허브 배송 담당자가 없습니다. hubId: " + res.startHubId());
-				}
-				UUID hubDeliveryManagerId = hubManagers.get(ThreadLocalRandom.current().nextInt(hubManagers.size()));
+				// 허브 배송 담당자도 순번대로 배정
+				UUID hubDeliveryManagerId =
+					deliveryManagerService.assignNextManager(res.startHubId(), ManagerType.HUB_STAFF);
 
 				DeliveryRouteRecord route = DeliveryRouteRecord.create(
 					sequence++,
@@ -211,6 +189,15 @@ public class DeliveryService {
 			} catch (Exception parseException) {
 				log.error("Outbox 실패 이벤트 직렬화 중 오류 발생: orderId={}", event.orderId(), parseException);
 			}
+		}
+
+		// 성공이든 보상 이벤트를 남겼든 이 이벤트에 대한 처리는 끝났다.
+		markProcessed(eventId);
+	}
+
+	private void markProcessed(UUID eventId) {
+		if (eventId != null) {
+			processedEventRepo.save(new ProcessedEventEntity(eventId));
 		}
 	}
 

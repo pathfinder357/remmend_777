@@ -47,3 +47,8 @@ management:
   tracing:
     sampling:
       probability: 1.0
+
+# 서비스 간 내부 API 호출 인증 키.
+# 운영에서는 INTERNAL_API_KEY 환경변수로 반드시 주입한다. 아래 기본값은 로컬 개발 전용이다.
+internal:
+  api-key: ${INTERNAL_API_KEY:local-dev-internal-key}

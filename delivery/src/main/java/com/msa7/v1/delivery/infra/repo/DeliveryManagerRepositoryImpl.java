@@ -17,12 +17,21 @@ import lombok.RequiredArgsConstructor;
 public class DeliveryManagerRepositoryImpl implements DeliveryManagerRepo {
 	private final JpaDeliveryManagerRepository jpaRepo;
 
+	/*
+	 * 기존 담당자가 있으면 감사·삭제 정보를 유지한 채 변경분만 반영한다.
+	 * (기존 엔티티를 그대로 저장하기만 하면 수정 API가 성공해도 DB 값이 바뀌지 않는다.)
+	 */
 	@Override
 	public DeliveryManager save(DeliveryManager manager) {
-		// 데이터가 존재하면 삭제 정보 유지 위한 코드
-		DeliveryManagerEntity entity = jpaRepo.findById(manager.getId()).orElse(toEntity(manager));
-		DeliveryManagerEntity savedEntity = jpaRepo.save(entity);
-		return toDomain(savedEntity);
+		DeliveryManagerEntity entity = jpaRepo.findById(manager.getId())
+			.map(existing -> {
+				existing.update(manager.getHubId(), manager.getSlackId(), manager.getType(),
+					manager.getAssignmentSeq());
+				return existing;
+			})
+			.orElseGet(() -> toEntity(manager));
+
+		return toDomain(jpaRepo.save(entity));
 	}
 
 	@Override
@@ -37,8 +46,9 @@ public class DeliveryManagerRepositoryImpl implements DeliveryManagerRepo {
 
 	@Override
 	public Optional<DeliveryManager> findNextAvailableManager(UUID hubId, ManagerType type, Integer lastAssignedSeq) {
-		return jpaRepo.findFirstByHubIdAndTypeAndAssignmentSeqGreaterThanOrderByAssignmentSeqAsc(hubId, type,
-				lastAssignedSeq)
+		return jpaRepo
+			.findFirstByHubIdAndTypeAndAssignmentSeqGreaterThanAndDeletedAtIsNullOrderByAssignmentSeqAsc(
+				hubId, type, lastAssignedSeq)
 			.map(this::toDomain);
 	}
 

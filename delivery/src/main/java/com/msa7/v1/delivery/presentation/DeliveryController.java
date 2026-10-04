@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -50,14 +52,30 @@ public class DeliveryController {
 	}
 
 
+	// 배송 담당자는 본인에게 배정된 경로만, 관리자는 모든 경로를 변경할 수 있다.
+	@PreAuthorize("hasAnyRole('MASTER', 'HUB_MANAGER', 'DELIVERY_AGENT')")
 	@PatchMapping("/{deliveryId}/routes/{routeId}/status")
 	public ResponseEntity<RestApiResponse<Void>> updateRouteStatus(
 		@PathVariable UUID deliveryId,
 		@PathVariable UUID routeId,
-		@RequestBody RouteStatusUpdateRequest request
+		@RequestBody RouteStatusUpdateRequest request,
+		Authentication authentication
 	) {
-		deliveryService.updateDeliveryRouteStatus(deliveryId, routeId, request.status());
+		deliveryService.updateDeliveryRouteStatus(deliveryId, routeId, request.status(),
+			ownershipCheckTarget(authentication));
 		return ResponseEntity.ok(RestApiResponse.ok("배송상태 업데이트", null));
+	}
+
+	/*
+	 * 담당자 본인 확인이 필요한 요청이면 사용자 ID를, 관리자 요청이면 null을 돌려준다.
+	 * null이면 서비스가 담당자 확인을 생략한다.
+	 */
+	private UUID ownershipCheckTarget(Authentication authentication) {
+		boolean isAdmin = authentication.getAuthorities().stream()
+			.map(GrantedAuthority::getAuthority)
+			.anyMatch(role -> role.equals("ROLE_MASTER") || role.equals("ROLE_HUB_MANAGER"));
+
+		return isAdmin ? null : (UUID) authentication.getPrincipal();
 	}
 
 

@@ -91,7 +91,7 @@ public class InventoryService {
          */
 
         // TODO: 인증 적용 후 INBOUND는 HUB_MANAGER와 MASTER만 허용한다.
-        // TODO: ORDER_DECREASE와 ORDER_CANCEL_RESTORE는 order-service의 내부 호출만 허용한다.
+        // ORDER_DECREASE와 ORDER_CANCEL_RESTORE는 InventoryInternalController(/internal/**)를 통해서만 호출된다.
 
 
         return InventoryResponse.from(inventory);

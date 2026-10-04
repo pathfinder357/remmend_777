@@ -18,13 +18,18 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "p_delivery")
+// 같은 주문으로 배송이 두 건 생기지 않도록 DB가 최종적으로 막는다.
+@Table(
+	name = "p_delivery",
+	uniqueConstraints = @UniqueConstraint(name = "uk_delivery_order_id", columnNames = "order_id")
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @SQLDelete(sql = "UPDATE p_delivery SET deleted_at = NOW() WHERE id = ?")

@@ -36,6 +36,7 @@ services:
     container_name: rabbitmq
     networks:
       - v1_network
+    # 아래 포트는 로컬 디버깅(관리 콘솔)용이다. 운영 배포에서는 제거한다.
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -58,8 +59,8 @@ services:
     container_name: eureka-server
     networks:
       - v1_network
-    ports:
-      - "19090:19090"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
 
   company-service:
@@ -70,8 +71,8 @@ services:
     container_name: company-service
     networks:
       - v1_network
-    ports:
-      - "19094:19094"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=company_schema
@@ -93,8 +94,8 @@ services:
     container_name: product-service
     networks:
       - v1_network
-    ports:
-      - "19095:19095"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=product_schema
@@ -103,6 +104,7 @@ services:
       DB_SCHEMA: product_schema
       EUREKA_URL: http://eureka-server:19090/eureka/
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
 
       SPRING_JPA_HIBERNATE_DDL_AUTO: create
 
@@ -118,8 +120,8 @@ services:
     container_name: hub-service
     networks:
       - v1_network
-    ports:
-      - "19093:19093"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=hub_schema
@@ -127,6 +129,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       EUREKA_URL: http://eureka-server:19090/eureka/
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
 
     depends_on:
       postgres:
@@ -140,8 +143,8 @@ services:
     container_name: order-service
     networks:
       - v1_network
-    ports:
-      - "19096:19096"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=order_schema
@@ -149,6 +152,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       EUREKA_URL: http://eureka-server:19090/eureka/
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       RABBITMQ_HOST: rabbitmq
 
     depends_on:
@@ -163,8 +167,8 @@ services:
     container_name: delivery-service
     networks:
       - v1_network
-    ports:
-      - "19097:19097"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=delivery_schema
@@ -172,6 +176,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       EUREKA_URL: http://eureka-server:19090/eureka/
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
 
     depends_on:
       postgres:
@@ -187,8 +192,8 @@ services:
     container_name: slack-service
     networks:
       - v1_network
-    ports:
-      - "19098:19098"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       SPRING_PROFILES_ACTIVE: dev
@@ -212,8 +217,8 @@ services:
     container_name: ai-service
     networks:
       - v1_network
-    ports:
-      - "19099:19099"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=ai_schema
@@ -222,6 +227,7 @@ services:
       AI_API_KEY: ${AI_API_KEY}
       EUREKA_URL: http://eureka-server:19090/eureka/
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
 
     depends_on:
       postgres:
@@ -235,8 +241,8 @@ services:
     container_name: user-service
     networks:
       - v1_network
-    ports:
-      - "19092:19092"
+    # 호스트 포트를 노출하지 않는다. 외부 진입점은 gateway-service 하나뿐이며,
+    # 이 서비스는 v1_network 안에서 서비스명으로만 접근할 수 있다.
 
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?currentSchema=user_schema
